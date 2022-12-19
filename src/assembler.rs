@@ -1,18 +1,4 @@
-/* Useful tools:
-- Online RISC-V assembler: https://riscvasm.lucasteske.dev/#
-- Online RISC-V disassembler: https://jborza.com/riscvdasm/
-- RISC-V reference card: https://github.com/jameslzhu/riscv-card/blob/master/riscv-card.pdf
-- Another RISC-V assembler: https://github.com/michaelmelanson/riscy
-- Berkeley CS61C RISC-V instruction formats: https://inst.eecs.berkeley.edu/~cs61c/resources/su18_lec/Lecture7.pdf
-
-To create a binary file from "[1, 2, 3]" debug output:
-````js
-const fs = require("fs");
-fs.writeFileSync("foo.bin", Buffer.from([1, 2, 3]));
-````
-
-- Sign extension: https://en.wikipedia.org/wiki/Sign_extension
-
+/*
 I-type instructions contain 12-bit signed immediate values (e.g. addi a0, a0, 1337). Signed negative value have their upper
 bits set to 1 and 'count back' from zero (e.g. -1 in 12 bit is 0b111111111111, -2 is 0b111111111110, etc.).
 
