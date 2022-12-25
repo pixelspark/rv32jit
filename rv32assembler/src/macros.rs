@@ -26,7 +26,7 @@ impl Fragment {
 	/// Generates function prologue
 	fn prologue(&mut self, local_bytes: u32) -> &mut Self {
 		// SP must be 128-bit aligned, so 16*4 = 128
-		let stack_size = (local_bytes + 4).next_multiple_of(16);
+		let stack_size = num::Integer::next_multiple_of(&(local_bytes + 4), &16u32);
 
 		self.subi(Register::StackPointer, Register::StackPointer, stack_size);
 		self.sw(Register::StackPointer, 0, Register::ReturnAddress);
@@ -36,7 +36,7 @@ impl Fragment {
 	/// Generates function epilogue
 	fn epilogue(&mut self, local_bytes: u32) -> &mut Self {
 		// SP must be 128-bit aligned, so 16*4 = 128
-		let stack_size = (local_bytes + 4).next_multiple_of(16);
+		let stack_size = num::Integer::next_multiple_of(&(local_bytes + 4), &16u32);
 
 		// self.sw(Register::StackPointer, 0, Register::ReturnAddress);
 		self.lw(Register::ReturnAddress, Register::StackPointer, 0);

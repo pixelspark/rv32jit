@@ -1,8 +1,8 @@
-[package]
-name = "rv32jit"
-version = "0.1.0"
-authors = ["Tommy van der Vorst <tommy@pixelspark.nl>"]
-edition = "2021"
+[workspace]
+members = [
+	"rv32jit",
+	"rv32assembler"
+]
 resolver = "2"
 
 [profile.release]
@@ -11,17 +11,3 @@ opt-level = "s"
 [profile.dev]
 debug = true # Symbols are nice and they don't increase the size on Flash
 opt-level = "z"
-
-[features]
-#pio = ["esp-idf-sys/pio"]
-
-[dependencies]
-embedded-hal = "0.2"
-embedded-svc = "0.23"
-esp-idf-svc = "^0.43.4"
-esp-idf-hal = "0.39.3"
-esp-idf-sys = { version = "^0.31", features = ["binstart"] }
-
-[build-dependencies]
-embuild = "0.29"
-anyhow = "1"

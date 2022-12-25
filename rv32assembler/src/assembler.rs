@@ -803,8 +803,19 @@ impl Fragment {
 		self.code
 			.iter()
 			.enumerate()
-			.flat_map(|(idx, ins)| ins.encode(idx as u32, &self.labels).to_be_bytes())
+			.flat_map(|(idx, ins)| ins.encode(idx as u32, &self.labels).to_le_bytes())
 			.collect()
+	}
+
+	pub fn write_to(&self, slice: &mut [u32]) {
+		// Encode instructions
+		for (idx, ins) in self.code.iter().enumerate() {
+			slice[idx] = ins.encode(idx as u32, &self.labels);
+		}
+	}
+
+	pub fn size(&self) -> usize {
+		self.code.len() * (INSTRUCTION_BYTES as usize)
 	}
 }
 

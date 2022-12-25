@@ -1,4 +1,7 @@
-use rv32jit::{Fragment, Register};
+mod jit;
+
+use jit::*;
+use rv32assembler::*;
 use std::ops::Not;
 
 // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
@@ -8,6 +11,7 @@ fn test_print(arg: u32) {
 	println!("Hello from the JIT! arg={arg}");
 }
 
+#[cfg(target_arch = "riscv32")]
 fn test_jit_loop() {
 	let mut fragment = Fragment::new();
 	fragment.subroutine(2, |fragment| {
@@ -33,7 +37,7 @@ fn test_jit_loop() {
 	});
 
 	println!("Fragment assembled: {fragment:?}");
-	let program = fragment.jit();
+	let program = JitFunction::from(&fragment);
 	println!("Call fragment");
 	let out = unsafe { program.call(13) };
 	println!("Called");
@@ -53,7 +57,7 @@ fn test_jit_call() {
 		f.call(ptr);
 	});
 
-	let program = f.jit();
+	let program = JitFunction::from(&f);
 	println!("Program is {program:?}");
 	unsafe { program.call(0) };
 	println!("Called");
@@ -66,7 +70,7 @@ fn test_jit_lui_large() {
 	f.li(Register::A0, magic);
 	f.not(Register::A0, Register::A0);
 	f.ret();
-	let program = f.jit();
+	let program = JitFunction::from(&f);
 	let s = unsafe { program.call(88) };
 	assert_eq!(s, not_magic, "Result {s:032b} should be {not_magic:032b}");
 }
@@ -75,7 +79,7 @@ fn test_jit_simple() {
 	let mut f = Fragment::new();
 	f.addi(Register::A0, Register::A0, 42);
 	f.ret();
-	let program = f.jit();
+	let program = JitFunction::from(&f);
 	println!("Add program is: {program:?}");
 	let s = unsafe { program.call(88) };
 	println!("Result: s= {} should be {}", s, 88 + 42);

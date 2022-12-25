@@ -30,6 +30,21 @@ curl "https://ccadb-public.secure.force.com/mozilla/IncludedRootsPEMTxt?TrustBit
 SSL_CERT_FILE=$(pwd)/IncludedRootsPEM.txt cargo build
 ```
 
+To test locally (replace `aarch64-apple-darwin` with your system's target triple, use `rustup target list` to find installed targets):
+
+```bash
+cargo run --example assemble --target aarch64-apple-darwin -- ~/Desktop/test2.bin
+```
+
+The above will write a binary that you can upload in e.g. [this disassembler](https://jborza.com/riscvdasm/).
+
+## Testing
+
+```bash
+cd rv32assembler
+cargo test --target aarch64-apple-darwin
+```
+
 ## Usage
 
 ```rust
