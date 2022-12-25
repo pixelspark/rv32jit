@@ -9,6 +9,13 @@ impl Fragment {
 		self
 	}
 
+	/// Loop forever
+	pub fn loop_forever(&mut self, block: impl Fn(&mut Self)) -> &mut Self {
+		let start = self.current_point();
+		block(self);
+		self.jump(start)
+	}
+
 	/// Save the indicated register to the stack. The 'slot' indicates the offset from the stack pointer in 4 byte increments
 	/// (as registers are 4 bytes).
 	pub fn save_to_stack(&mut self, slot: u32, rs: Register) -> &mut Self {

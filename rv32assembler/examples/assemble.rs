@@ -4,12 +4,13 @@ use std::{env, io::Write};
 pub fn main() {
 	let mut f = Fragment::new();
 	f.subroutine(0, |f| {
-		f.add(
-			rv32assembler::Register::A0,
-			rv32assembler::Register::A1,
-			rv32assembler::Register::A0,
-		);
-		f.ret();
+		f.loop_forever(|f| {
+			f.add(
+				rv32assembler::Register::A0,
+				rv32assembler::Register::A1,
+				rv32assembler::Register::A0,
+			);
+		});
 	});
 
 	let program = f.binary();
