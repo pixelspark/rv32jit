@@ -13,15 +13,24 @@ Note that logical functions (andi, ori, xori) sign-extend the 12 bit immediate v
 be set to the value of bit 12. For instance the 12 bit immediate 0xF0000 will become 0xFFFF0000, and 0x0F000 becomes 0x0000F000.
 */
 
+use std::ops::AddAssign;
+
 #[derive(Debug, Clone)]
 pub struct Fragment {
-	pub(crate) code: Vec<Provisional>,
-	pub(crate) labels: Vec<Option<u32>>,
+	pub(crate) code: Code,
+	pub(crate) labels: Vec<Option<Position>>,
 }
 
-/// Size of a single instruction
-pub(crate) const INSTRUCTION_BYTES: u32 = 4;
+#[derive(Debug, Clone)]
+pub(crate) struct Code {
+	code: Vec<Provisional>,
+	position: Position,
+}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position(u32);
+
+/// Size of a single instruction
 pub(crate) const LOWER_20_BITS: u32 = 0b00000000000011111111111111111111;
 pub(crate) const LOWER_12_BITS: u32 = 0b00000000000000000000111111111111;
 pub(crate) const UPPER_20_BITS: u32 = 0b11111111111111111111000000000000;
@@ -169,15 +178,38 @@ pub(crate) enum Provisional {
 	Jump(Instruction, Label),
 }
 
+impl AddAssign<u32> for Position {
+	fn add_assign(&mut self, rhs: u32) {
+		self.0 += rhs;
+	}
+}
+
+impl Code {
+	pub fn new() -> Code {
+		Code {
+			code: vec![],
+			position: Position(0),
+		}
+	}
+
+	pub fn append(&mut self, ins: Provisional) {
+		self.position += ins.size();
+		self.code.push(ins);
+	}
+
+	pub fn position(&self) -> Position {
+		self.position
+	}
+}
+
 impl Provisional {
-	pub(crate) fn encode(&self, at_index: u32, labels: &[Option<u32>]) -> u32 {
+	pub(crate) fn encode(&self, at_position: Position, labels: &[Option<Position>]) -> u32 {
 		match self {
 			Self::Instruction(i) => i.encode(),
 			Self::Jump(i, lbl) => {
 				// Resolve the jump to a relative address
 				let label_address = labels[lbl.0].unwrap();
-				let dest =
-					(label_address * INSTRUCTION_BYTES).wrapping_sub(at_index * INSTRUCTION_BYTES);
+				let dest = (label_address.0).wrapping_sub(at_position.0);
 
 				let translated = match *i {
 					Instruction::I { op, rs, rd, imm: _ } => Instruction::I {
@@ -204,6 +236,13 @@ impl Provisional {
 				};
 				translated.encode()
 			}
+		}
+	}
+
+	fn size(&self) -> u32 {
+		match self {
+			Self::Jump(i, _) => i.size_bytes(),
+			Self::Instruction(i) => i.size_bytes(),
 		}
 	}
 }
@@ -449,6 +488,10 @@ impl Instruction {
 			}
 		}
 	}
+
+	fn size_bytes(&self) -> u32 {
+		4
+	}
 }
 
 macro_rules! binary_op {
@@ -456,7 +499,7 @@ macro_rules! binary_op {
 		/// Append a $func binary (R) instruction
 		#[allow(dead_code)]
 		pub fn $func(&mut self, rd: Register, rs1: Register, rs2: Register) -> &mut Self {
-			self.code.push(Provisional::Instruction(Instruction::R {
+			self.code.append(Provisional::Instruction(Instruction::R {
 				op: $op,
 				rd,
 				rs1,
@@ -481,7 +524,7 @@ macro_rules! immediate_op {
 				imm
 			);
 
-			self.code.push(Provisional::Instruction(Instruction::I {
+			self.code.append(Provisional::Instruction(Instruction::I {
 				op: $op,
 				rs,
 				rd,
@@ -497,7 +540,7 @@ macro_rules! j_op {
 		/// Append a $func jump instruction
 		#[allow(dead_code)]
 		pub fn $func(&mut self, rd: Register, imm: u32) -> &mut Self {
-			self.code.push(Provisional::Instruction(Instruction::J {
+			self.code.append(Provisional::Instruction(Instruction::J {
 				op: $op,
 				rd,
 				imm,
@@ -512,7 +555,7 @@ macro_rules! store_op {
 		/// Append a $func store instruction
 		#[allow(dead_code)]
 		pub fn $func(&mut self, rs1: Register, imm: u32, rs2: Register) -> &mut Self {
-			self.code.push(Provisional::Instruction(Instruction::S {
+			self.code.append(Provisional::Instruction(Instruction::S {
 				op: $op,
 				rs1,
 				rs2,
@@ -528,7 +571,7 @@ macro_rules! branch_op {
 		/// Append a $func branch instruction
 		#[allow(dead_code)]
 		pub fn $func(&mut self, rs1: Register, rs2: Register, label: Label) -> &mut Self {
-			self.code.push(Provisional::Jump(
+			self.code.append(Provisional::Jump(
 				Instruction::B {
 					op: $op,
 					rs1,
@@ -545,7 +588,7 @@ macro_rules! branch_op {
 impl Fragment {
 	pub fn new() -> Fragment {
 		Fragment {
-			code: vec![],
+			code: Code::new(),
 			labels: vec![],
 		}
 	}
@@ -554,7 +597,6 @@ impl Fragment {
 	pub fn ret(&mut self) -> &mut Self {
 		// Equals jalr x0, x1, 0 / jalr zero, ra, 0
 		self.jalr(Register::Zero, Register::ReturnAddress, 0);
-		//self.code.push(0x00008067);
 		self
 	}
 
@@ -610,7 +652,7 @@ impl Fragment {
 
 	/// Transfer control to OS
 	pub fn ecall(&mut self) -> &mut Self {
-		self.code.push(Provisional::Instruction(Instruction::I {
+		self.code.append(Provisional::Instruction(Instruction::I {
 			op: Opcode::Ecall,
 			rs: Register::Zero,
 			rd: Register::Zero,
@@ -621,7 +663,7 @@ impl Fragment {
 
 	/// Transfer control to debugger
 	pub fn ebreak(&mut self) -> &mut Self {
-		self.code.push(Provisional::Instruction(Instruction::I {
+		self.code.append(Provisional::Instruction(Instruction::I {
 			op: Opcode::Ebreak,
 			rs: Register::Zero,
 			rd: Register::Zero,
@@ -632,7 +674,7 @@ impl Fragment {
 
 	/// Adjust upper immediate PC
 	pub fn auipc(&mut self, rd: Register, imm: u32) -> &mut Self {
-		self.code.push(Provisional::Instruction(Instruction::U {
+		self.code.append(Provisional::Instruction(Instruction::U {
 			op: Opcode::Auipc,
 			rd,
 			imm,
@@ -642,7 +684,7 @@ impl Fragment {
 
 	/// Load upper immediate
 	pub fn lui(&mut self, rd: Register, imm: u32) -> &mut Self {
-		self.code.push(Provisional::Instruction(Instruction::U {
+		self.code.append(Provisional::Instruction(Instruction::U {
 			op: Opcode::Lui,
 			rd,
 			imm,
@@ -722,7 +764,7 @@ impl Fragment {
 
 	/// Generate an unconditional jumo to a specific label
 	pub fn jump(&mut self, label: Label) -> &mut Self {
-		self.code.push(Provisional::Jump(
+		self.code.append(Provisional::Jump(
 			Instruction::J {
 				op: Opcode::Jal,
 				rd: Register::Zero,
@@ -783,11 +825,11 @@ impl Fragment {
 
 	/// Return a label that refers to the current end of the fragment
 	pub fn current_point(&mut self) -> Label {
-		self.labels.push(Some(self.code.len() as u32));
+		self.labels.push(Some(self.code.position()));
 		println!(
-			"current point label {}={}",
+			"current point label {}={:?}",
 			self.labels.len() - 1,
-			self.code.len()
+			self.code.position()
 		);
 		Label(self.labels.len() - 1)
 	}
@@ -795,27 +837,34 @@ impl Fragment {
 	/// Set the location of the given label to the current end of the fragment
 	pub fn label(&mut self, label: Label) {
 		assert_eq!(self.labels[label.0], None, "cannot re-assign label");
-		self.labels[label.0] = Some(self.code.len() as u32);
+		self.labels[label.0] = Some(self.code.position());
 	}
 
 	// Return assembled fragment
 	pub fn binary(&self) -> Vec<u8> {
+		let mut position = Position(0);
 		self.code
+			.code
 			.iter()
-			.enumerate()
-			.flat_map(|(idx, ins)| ins.encode(idx as u32, &self.labels).to_le_bytes())
+			.flat_map(|ins| {
+				let res = ins.encode(position, &self.labels).to_le_bytes();
+				position += ins.size();
+				res
+			})
 			.collect()
 	}
 
 	pub fn write_to(&self, slice: &mut [u32]) {
 		// Encode instructions
-		for (idx, ins) in self.code.iter().enumerate() {
-			slice[idx] = ins.encode(idx as u32, &self.labels);
+		let mut position = Position(0);
+		for (idx, ins) in self.code.code.iter().enumerate() {
+			slice[idx] = ins.encode(position, &self.labels);
+			position += ins.size();
 		}
 	}
 
 	pub fn size(&self) -> usize {
-		self.code.len() * (INSTRUCTION_BYTES as usize)
+		self.code.position().0 as usize
 	}
 }
 
