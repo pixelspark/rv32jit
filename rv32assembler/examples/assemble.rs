@@ -3,7 +3,7 @@ use std::{env, io::Write};
 
 pub fn main() {
 	let mut f = Fragment::new();
-	f.subroutine(0, |f| {
+	f.subroutine(0, |f, _| {
 		f.loop_forever(|f| {
 			f.add(
 				rv32assembler::Register::A0,

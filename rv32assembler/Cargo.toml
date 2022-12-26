@@ -8,4 +8,5 @@ edition = "2021"
 num = "^0.4.0"
 
 [dev-dependencies]
-rvemu = "0.0.11"
+#rvemu = "0.0.11"
+rvemu = { git = "https://github.com/pixelspark/rvemu.git", branch = "feature/expose-rom" }

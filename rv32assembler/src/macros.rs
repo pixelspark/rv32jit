@@ -3,10 +3,10 @@ use crate::{Fragment, Label, Register, BIT_12, LOWER_12_BITS, UPPER_20_BITS};
 impl Fragment {
 	/// Generate a subroutine with prologue and epilogue, and the indicates number of slots for local variables (4-byte sized)
 	/// Call using Fragment::jal_label(returned label)
-	pub fn subroutine(&mut self, local_slots: u32, block: impl Fn(&mut Self)) -> Label {
+	pub fn subroutine(&mut self, local_slots: u32, block: impl Fn(&mut Self, Label)) -> Label {
 		let sr_label = self.current_point();
 		self.prologue(local_slots * 4);
-		block(self);
+		block(self, sr_label);
 		self.epilogue(local_slots * 4);
 		sr_label
 	}
@@ -24,6 +24,12 @@ impl Fragment {
 		block(self, break_label);
 		self.jump(start);
 		self.label(break_label);
+		self
+	}
+
+	/// Append instruction to set the indicated register to zero
+	pub fn zero(&mut self, rd: Register) -> &mut Self {
+		self.add(rd, Register::Zero, Register::Zero);
 		self
 	}
 

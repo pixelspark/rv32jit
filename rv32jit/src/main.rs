@@ -14,7 +14,7 @@ fn test_print(arg: u32) {
 #[cfg(target_arch = "riscv32")]
 fn test_jit_loop() {
 	let mut fragment = Fragment::new();
-	fragment.subroutine(2, |fragment| {
+	fragment.subroutine(2, |fragment, _| {
 		// The equivalent of:
 		// let mut i = 10;
 		// while i != 0 {
@@ -49,7 +49,7 @@ fn test_jit_call() {
 	let mut f = Fragment::new();
 
 	// Function prologue
-	f.subroutine(0, |f| {
+	f.subroutine(0, |f, _| {
 		let ptr = test_print as usize as u32; // test_print as *const fn() as u32;
 		if (ptr & 3) != 0 {
 			panic!("function pointer is not 4 byte aligned!");
