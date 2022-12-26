@@ -170,12 +170,16 @@ pub(crate) enum Instruction {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Label(usize);
+pub enum Label {
+	Position(Position),
+	Index(usize),
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum Provisional {
 	Instruction(Instruction),
 	Jump(Instruction, Label),
+	Raw(u32),
 }
 
 impl AddAssign<u32> for Position {
@@ -205,10 +209,14 @@ impl Code {
 impl Provisional {
 	pub(crate) fn encode(&self, at_position: Position, labels: &[Option<Position>]) -> u32 {
 		match self {
+			Self::Raw(b) => *b,
 			Self::Instruction(i) => i.encode(),
 			Self::Jump(i, lbl) => {
 				// Resolve the jump to a relative address
-				let label_address = labels[lbl.0].unwrap();
+				let label_address = match lbl {
+					Label::Position(p) => *p,
+					Label::Index(label_index) => labels[*label_index].unwrap(),
+				};
 				let dest = (label_address.0).wrapping_sub(at_position.0);
 
 				let translated = match *i {
@@ -241,6 +249,7 @@ impl Provisional {
 
 	fn size(&self) -> u32 {
 		match self {
+			Self::Raw(_) => 4,
 			Self::Jump(i, _) => i.size_bytes(),
 			Self::Instruction(i) => i.size_bytes(),
 		}
@@ -698,7 +707,6 @@ impl Fragment {
 	pub fn call(&mut self, address: u32) -> &mut Self {
 		let mut high = (address >> 12) & UPPER_20_BITS;
 		let low = address & LOWER_12_BITS;
-		println!("call\t{address:032b}\nlui\t{high:032b}\njalr\t{low:032b}",);
 		if low & BIT_12 != 0 {
 			// high sign bit is set, need to increment high word with one
 			// See: https://inst.eecs.berkeley.edu/~cs61c/resources/su18_lec/Lecture7.pdf, p 55
@@ -762,12 +770,25 @@ impl Fragment {
 	j_op!(jal, Opcode::Jal);
 	immediate_op!(jalr, Opcode::Jalr);
 
-	/// Generate an unconditional jumo to a specific label
+	/// Generate an unconditional jump to a specific label
 	pub fn jump(&mut self, label: Label) -> &mut Self {
 		self.code.append(Provisional::Jump(
 			Instruction::J {
 				op: Opcode::Jal,
 				rd: Register::Zero,
+				imm: 0,
+			},
+			label,
+		));
+		self
+	}
+
+	/// Generate an unconditional jump-and-link to a specific label
+	pub fn jal_label(&mut self, label: Label) -> &mut Self {
+		self.code.append(Provisional::Jump(
+			Instruction::J {
+				op: Opcode::Jal,
+				rd: Register::ReturnAddress,
 				imm: 0,
 			},
 			label,
@@ -815,29 +836,32 @@ impl Fragment {
 		self.bge(rs2, rs1, label)
 	}
 
+	pub fn raw(&mut self, bytes: u32) -> &mut Self {
+		self.code.append(Provisional::Raw(bytes));
+		self
+	}
+
 	/// Create a label that will refer to a point yet to be appended to this fragment. The label should be 'filled in' later
 	/// by calling `label` at the appropriate point in the future.
 	pub fn future_point(&mut self) -> Label {
 		self.labels.push(None);
-		println!("future point label: {}", self.labels.len() - 1);
-		Label(self.labels.len() - 1)
+		Label::Index(self.labels.len() - 1)
 	}
 
 	/// Return a label that refers to the current end of the fragment
 	pub fn current_point(&mut self) -> Label {
-		self.labels.push(Some(self.code.position()));
-		println!(
-			"current point label {}={:?}",
-			self.labels.len() - 1,
-			self.code.position()
-		);
-		Label(self.labels.len() - 1)
+		Label::Position(self.code.position())
 	}
 
 	/// Set the location of the given label to the current end of the fragment
 	pub fn label(&mut self, label: Label) {
-		assert_eq!(self.labels[label.0], None, "cannot re-assign label");
-		self.labels[label.0] = Some(self.code.position());
+		match label {
+			Label::Position(_) => panic!("a label that already has a position cannot be changed"),
+			Label::Index(idx) => {
+				assert_eq!(self.labels[idx], None, "cannot re-assign label");
+				self.labels[idx] = Some(self.code.position());
+			}
+		}
 	}
 
 	// Return assembled fragment
