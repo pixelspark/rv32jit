@@ -52,7 +52,7 @@ fn test_jit_simple() {
 	let mut f = Fragment::new();
 	f.addi(Register::A0, Register::A0, 42);
 	f.ret();
-	let program = f.jit();
+	let program = JitFunction::from(&f);
 	let s = unsafe { program.call(88) };
 	assert_eq!(s, 88 + 42);
 }
