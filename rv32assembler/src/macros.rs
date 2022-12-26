@@ -1,4 +1,4 @@
-use crate::{Fragment, Register, BIT_12, LOWER_12_BITS, UPPER_20_BITS};
+use crate::{Fragment, Label, Register, BIT_12, LOWER_12_BITS, UPPER_20_BITS};
 
 impl Fragment {
 	/// Generate a subroutine with prologue and epilogue, and the indicates number of slots for local variables (4-byte sized)
@@ -14,6 +14,15 @@ impl Fragment {
 		let start = self.current_point();
 		block(self);
 		self.jump(start)
+	}
+
+	pub fn loop_until(&mut self, block: impl Fn(&mut Self, Label)) -> &mut Self {
+		let break_label = self.future_point();
+		let start = self.current_point();
+		block(self, break_label);
+		self.jump(start);
+		self.label(break_label);
+		self
 	}
 
 	/// Save the indicated register to the stack. The 'slot' indicates the offset from the stack pointer in 4 byte increments

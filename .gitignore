@@ -2,3 +2,4 @@
 /.embuild
 /target
 /IncludedRootsPEM.txt
+/rv32assembler/rvemu.dts

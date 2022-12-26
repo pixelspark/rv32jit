@@ -353,7 +353,7 @@ impl Opcode {
 }
 
 impl Register {
-	fn encode(&self) -> u32 {
+	pub fn number(&self) -> u32 {
 		match self {
 			Register::Zero => 0,
 
@@ -400,13 +400,13 @@ impl Instruction {
 					imm & UPPER_20_BITS == 0,
 					"upper 20 bits of immediate must be zero for I type instruction, but the immediate is {imm:032b} for op {op:?} rs={rs:?} rd={rd:?}"
 				);
-				imm << 20 | rs.encode() << 15 | op.funct3() << 12 | rd.encode() << 7 | op.opcode()
+				imm << 20 | rs.number() << 15 | op.funct3() << 12 | rd.number() << 7 | op.opcode()
 			}
 
 			Instruction::R { op, rs1, rs2, rd } => {
 				op.funct7() << 25
-					| rs2.encode() << 20 | rs1.encode() << 15
-					| op.funct3() << 12 | rd.encode() << 7
+					| rs2.number() << 20 | rs1.number() << 15
+					| op.funct3() << 12 | rd.number() << 7
 					| op.opcode()
 			}
 
@@ -416,7 +416,7 @@ impl Instruction {
 					| (((imm >> 1) & 0b1111111111) << 21)
 					| (((imm >> 11) & 0b1) << 20)
 					| (((imm >> 12) & 0b11111111) << 12)
-					| (rd.encode() << 7) | op.opcode()
+					| (rd.number() << 7) | op.opcode()
 			}
 
 			Instruction::U { op, rd, imm } => {
@@ -424,13 +424,13 @@ impl Instruction {
 					imm & UPPER_12_BITS == 0,
 					"upper 12 bits must be zero for U-type instruction"
 				);
-				rd.encode() << 7 | op.opcode() | ((imm & LOWER_20_BITS) << 12)
+				rd.number() << 7 | op.opcode() | ((imm & LOWER_20_BITS) << 12)
 			}
 
 			Instruction::S { op, imm, rs1, rs2 } => {
 				(((imm >> 5) & 0b1111111) << 25)
-					| (rs2.encode() << 20)
-					| (rs1.encode() << 15)
+					| (rs2.number() << 20)
+					| (rs1.number() << 15)
 					| (op.funct3() << 12)
 					| ((imm & 0b11111) << 7)
 					| op.opcode()
@@ -440,8 +440,8 @@ impl Instruction {
 				// Note, this corrects for the fact that destination offsets (in the immediate value) are multiples of 2 bytes
 				(((imm >> 20) & 0b1) << 31)
 					| (((imm >> 5) & 0b111111) << 25)
-					| (rs2.encode() << 20)
-					| (rs1.encode() << 15)
+					| (rs2.number() << 20)
+					| (rs1.number() << 15)
 					| (op.funct3() << 12)
 					| (((imm >> 1) & 0b1111) << 8)
 					| (((imm >> 11) & 0b1) << 7)
@@ -566,7 +566,7 @@ impl Fragment {
 
 	/// Copy register
 	pub fn mv(&mut self, rd: Register, rs: Register) -> &mut Self {
-		self.sub(rd, Register::Zero, rs);
+		self.addi(rd, rs, 0);
 		self
 	}
 
