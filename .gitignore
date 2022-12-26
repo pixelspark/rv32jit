@@ -3,3 +3,4 @@
 /target
 /IncludedRootsPEM.txt
 /rv32assembler/rvemu.dts
+/rv32assembler/rvemu.dtb
