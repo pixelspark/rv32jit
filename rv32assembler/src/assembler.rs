@@ -89,6 +89,26 @@ pub(crate) enum Opcode {
 	Xori,
 }
 
+#[allow(clippy::upper_case_acronyms, dead_code)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CompressedOpcode {
+	CAddi,
+}
+
+impl CompressedOpcode {
+	fn opcode(&self) -> u16 {
+		match self {
+			Self::CAddi => 0b01,
+		}
+	}
+
+	fn funct(&self) -> u16 {
+		match self {
+			Self::CAddi => 0b000,
+		}
+	}
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub enum Register {
@@ -129,12 +149,17 @@ pub enum Register {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EncodedInstruction {
 	Regular(u32),
-	Compressed(i16),
+	Compressed(u16),
 }
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum CompressedInstruction {
 	CNop,
+	CI {
+		op: CompressedOpcode,
+		rd_rs1: Register,
+		imm: u16,
+	},
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -180,6 +205,26 @@ pub(crate) enum Instruction {
 	},
 
 	Compressed(CompressedInstruction),
+}
+
+#[test]
+fn test_compressed_encoding() {
+	println!(
+		"c_nop: {:02x?}",
+		Instruction::Compressed(CompressedInstruction::CNop)
+			.encode()
+			.bytes()
+	);
+	println!(
+		"c_nop2: {:02x?}",
+		Instruction::Compressed(CompressedInstruction::CI {
+			op: CompressedOpcode::CAddi,
+			rd_rs1: Register::Zero,
+			imm: 0
+		})
+		.encode()
+		.bytes()
+	);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -456,6 +501,14 @@ impl Register {
 			Register::T6 => 32,
 		}
 	}
+
+	pub fn encode_compressed(&self) -> u16 {
+		assert!(
+			self.number() >= 8,
+			"cannot encode register {self:?} in compressed instruction"
+		);
+		self.number() as u16 - 8
+	}
 }
 
 impl Instruction {
@@ -541,9 +594,20 @@ impl Instruction {
 
 impl CompressedInstruction {
 	fn encode(&self) -> EncodedInstruction {
-		match self {
-			CompressedInstruction::CNop => EncodedInstruction::Compressed(0x00000001),
-		}
+		EncodedInstruction::Compressed(match self {
+			CompressedInstruction::CNop => 0x00000001_u16,
+			CompressedInstruction::CI {
+				op,
+				rd_rs1: rd,
+				imm,
+			} => {
+				(op.funct() << 13)
+					| (((*imm >> 5) & 0b1) << 12)
+					| ((rd.number() as u16) << 7)
+					| ((*imm & 0b11111) << 2)
+					| op.opcode()
+			}
+		})
 	}
 }
 
@@ -822,6 +886,18 @@ impl Fragment {
 		self
 	}
 
+	pub fn c_addi(&mut self, rd_rs1: Register, imm: i16) -> &mut Self {
+		self.code
+			.append(Provisional::Instruction(Instruction::Compressed(
+				CompressedInstruction::CI {
+					op: CompressedOpcode::CAddi,
+					rd_rs1,
+					imm: sign_extend(imm as i32, 6) as u16,
+				},
+			)));
+		self
+	}
+
 	/// Generate an unconditional jump to a specific label
 	pub fn jump(&mut self, label: Label) -> &mut Self {
 		self.code.append(Provisional::Jump(
@@ -959,4 +1035,44 @@ impl EncodedInstruction {
 			EncodedInstruction::Compressed(b) => b.to_le_bytes().to_vec(),
 		}
 	}
+}
+
+fn sign_extend(imm: i32, bit_width: usize) -> u32 {
+	let sign_bit = 0b1 << bit_width;
+	let upper_mask = 0xFFFF_FFFF << (bit_width - 1);
+	let lower_mask = !upper_mask;
+
+	if imm >= 0 {
+		assert!(imm < (0b1 << bit_width));
+		(imm as u32) & lower_mask
+	} else {
+		assert!(imm > -(0b1 << bit_width));
+		((imm as u32) & lower_mask) | sign_bit | upper_mask
+	}
+}
+
+#[test]
+fn test_sign_extend() {
+	assert_eq!(sign_extend(0, 6), 0b0);
+	assert_eq!(sign_extend(1, 6), 0b1);
+	assert_eq!(sign_extend(63, 6), 0b011111);
+	//assert_eq!(sign_extend(64, 6), 0b111111); // panics
+	assert_eq!(sign_extend(10, 6), 0b001010);
+	assert_eq!(
+		sign_extend(-10, 6),
+		0b1111_1111_1111_1111_1111_1111_1111_0110,
+	);
+	assert_eq!(sign_extend(-63, 6), 0b11111111111111111111111111100001);
+}
+
+#[test]
+#[should_panic]
+fn test_sign_extend_panic() {
+	sign_extend(64, 6);
+}
+
+#[test]
+#[should_panic]
+fn test_sign_extend_panic_2() {
+	sign_extend(-64, 6);
 }

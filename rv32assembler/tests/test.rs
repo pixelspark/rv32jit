@@ -112,6 +112,7 @@ mod emulated {
 			let fib_end = f.future_point();
 			f.li(Register::T0, 1);
 			f.c_nop();
+			f.c_addi(Register::Zero, 0);
 			f.ble(Register::A0, Register::T0, ret_one);
 
 			// Save S0
