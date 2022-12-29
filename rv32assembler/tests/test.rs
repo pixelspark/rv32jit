@@ -39,15 +39,15 @@ mod emulated {
 
 		loop {
 			match emu.cpu.execute() {
-				Ok(_ins) => {
-					// println!(
-					// 	"{ins:08x} A0={:08x} RA={:08x} SP={:08x} PC={}",
-					// 	emu.cpu.xregs.read(Register::A0.number() as u64),
-					// 	emu.cpu.xregs.read(Register::ReturnAddress.number() as u64),
-					// 	emu.cpu.xregs.read(Register::StackPointer.number() as u64)
-					// 		- rvemu::bus::DRAM_BASE,
-					// 	emu.cpu.pc - base
-					// )
+				Ok(ins) => {
+					println!(
+						"{ins:08x} A0={:08x} RA={:08x} SP={:08x} PC={}",
+						emu.cpu.xregs.read(Register::A0.number() as u64),
+						emu.cpu.xregs.read(Register::ReturnAddress.number() as u64),
+						emu.cpu.xregs.read(Register::StackPointer.number() as u64)
+							- rvemu::bus::DRAM_BASE,
+						emu.cpu.pc - base
+					)
 				}
 				Err(e) => match e {
 					rvemu::exception::Exception::Breakpoint => break,
@@ -104,15 +104,19 @@ mod emulated {
 	fn test_fib() {
 		let mut f = Fragment::new();
 		let end = f.future_point();
+
 		f.jump(end);
+		f.c_nop();
 		let fib = f.subroutine(2, |f, fib| {
 			let ret_one = f.future_point();
 			let fib_end = f.future_point();
 			f.li(Register::T0, 1);
+			f.c_nop();
 			f.ble(Register::A0, Register::T0, ret_one);
 
 			// Save S0
 			f.save_to_stack(0, Register::S0);
+			f.c_nop();
 			f.save_to_stack(1, Register::S1);
 
 			// Save A0 -> S0
@@ -120,6 +124,8 @@ mod emulated {
 
 			// fib(n-1)
 			f.subi(Register::A0, Register::S0, 1);
+			f.c_nop();
+			f.c_nop();
 			f.jal_label(fib);
 			f.mv(Register::S1, Register::A0); // Save return value in S1
 

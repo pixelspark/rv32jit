@@ -132,6 +132,11 @@ pub(crate) enum EncodedInstruction {
 	Compressed(i16),
 }
 
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum CompressedInstruction {
+	CNop,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Instruction {
 	I {
@@ -173,6 +178,8 @@ pub(crate) enum Instruction {
 		rs1: Register,
 		rs2: Register,
 	},
+
+	Compressed(CompressedInstruction),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -249,8 +256,9 @@ impl Provisional {
 						rs1,
 						rs2,
 					},
-					Instruction::R { .. } => panic!("cannot jumpify an R insn"),
-					Instruction::S { .. } => panic!("cannot jumpify an R insn"),
+					Instruction::R { .. } => panic!("cannot jumpify an R instruction"),
+					Instruction::S { .. } => panic!("cannot jumpify an R instruction"),
+					Instruction::Compressed(_) => panic!("cannot jumpify a compressed instruction"),
 				};
 				translated.encode()
 			}
@@ -513,11 +521,29 @@ impl Instruction {
 						| op.opcode(),
 				)
 			}
+
+			Instruction::Compressed(c) => c.encode(),
 		}
 	}
 
 	fn size_bytes(&self) -> u32 {
-		4
+		match self {
+			Instruction::I { .. }
+			| Instruction::R { .. }
+			| Instruction::J { .. }
+			| Instruction::U { .. }
+			| Instruction::S { .. }
+			| Instruction::B { .. } => 4,
+			Instruction::Compressed(_) => 2,
+		}
+	}
+}
+
+impl CompressedInstruction {
+	fn encode(&self) -> EncodedInstruction {
+		match self {
+			CompressedInstruction::CNop => EncodedInstruction::Compressed(0x00000001),
+		}
 	}
 }
 
@@ -787,6 +813,14 @@ impl Fragment {
 	// Jumps
 	j_op!(jal, Opcode::Jal);
 	immediate_op!(jalr, Opcode::Jalr);
+
+	pub fn c_nop(&mut self) -> &mut Self {
+		self.code
+			.append(Provisional::Instruction(Instruction::Compressed(
+				CompressedInstruction::CNop,
+			)));
+		self
+	}
 
 	/// Generate an unconditional jump to a specific label
 	pub fn jump(&mut self, label: Label) -> &mut Self {
