@@ -30,7 +30,7 @@ pub(crate) struct Code {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position(u32);
 
-/// Size of a single instruction
+/// Various useful bitmasks for encoding instructions
 pub(crate) const LOWER_20_BITS: u32 = 0b00000000000011111111111111111111;
 pub(crate) const LOWER_12_BITS: u32 = 0b00000000000000000000111111111111;
 pub(crate) const UPPER_20_BITS: u32 = 0b11111111111111111111000000000000;
@@ -127,6 +127,12 @@ pub enum Register {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub(crate) enum EncodedInstruction {
+	Regular(u32),
+	Compressed(i16),
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum Instruction {
 	I {
 		op: Opcode,
@@ -207,9 +213,13 @@ impl Code {
 }
 
 impl Provisional {
-	pub(crate) fn encode(&self, at_position: Position, labels: &[Option<Position>]) -> u32 {
+	pub(crate) fn encode(
+		&self,
+		at_position: Position,
+		labels: &[Option<Position>],
+	) -> EncodedInstruction {
 		match self {
-			Self::Raw(b) => *b,
+			Self::Raw(b) => EncodedInstruction::Regular(*b),
 			Self::Instruction(i) => i.encode(),
 			Self::Jump(i, lbl) => {
 				// Resolve the jump to a relative address
@@ -441,30 +451,36 @@ impl Register {
 }
 
 impl Instruction {
-	fn encode(&self) -> u32 {
+	fn encode(&self) -> EncodedInstruction {
 		match self {
 			Instruction::I { op, rs, rd, imm } => {
 				assert!(
 					imm & UPPER_20_BITS == 0,
 					"upper 20 bits of immediate must be zero for I type instruction, but the immediate is {imm:032b} for op {op:?} rs={rs:?} rd={rd:?}"
 				);
-				imm << 20 | rs.number() << 15 | op.funct3() << 12 | rd.number() << 7 | op.opcode()
+				EncodedInstruction::Regular(
+					imm << 20
+						| rs.number() << 15 | op.funct3() << 12
+						| rd.number() << 7 | op.opcode(),
+				)
 			}
 
-			Instruction::R { op, rs1, rs2, rd } => {
+			Instruction::R { op, rs1, rs2, rd } => EncodedInstruction::Regular(
 				op.funct7() << 25
 					| rs2.number() << 20 | rs1.number() << 15
 					| op.funct3() << 12 | rd.number() << 7
-					| op.opcode()
-			}
+					| op.opcode(),
+			),
 
 			Instruction::J { op, rd, imm } => {
 				// https://github.com/michaelmelanson/riscy/blob/cfab625aeaf8ea402ea877aafd30ae84dfc22df0/isa/src/instruction.rs#L666
-				(((imm >> 20) & 0b1) << 31)
-					| (((imm >> 1) & 0b1111111111) << 21)
-					| (((imm >> 11) & 0b1) << 20)
-					| (((imm >> 12) & 0b11111111) << 12)
-					| (rd.number() << 7) | op.opcode()
+				EncodedInstruction::Regular(
+					(((imm >> 20) & 0b1) << 31)
+						| (((imm >> 1) & 0b1111111111) << 21)
+						| (((imm >> 11) & 0b1) << 20)
+						| (((imm >> 12) & 0b11111111) << 12)
+						| (rd.number() << 7) | op.opcode(),
+				)
 			}
 
 			Instruction::U { op, rd, imm } => {
@@ -472,28 +488,30 @@ impl Instruction {
 					imm & UPPER_12_BITS == 0,
 					"upper 12 bits must be zero for U-type instruction"
 				);
-				rd.number() << 7 | op.opcode() | ((imm & LOWER_20_BITS) << 12)
+				EncodedInstruction::Regular(
+					rd.number() << 7 | op.opcode() | ((imm & LOWER_20_BITS) << 12),
+				)
 			}
 
 			Instruction::S { op, imm, rs1, rs2 } => {
-				(((imm >> 5) & 0b1111111) << 25)
-					| (rs2.number() << 20)
-					| (rs1.number() << 15)
-					| (op.funct3() << 12)
-					| ((imm & 0b11111) << 7)
-					| op.opcode()
+				EncodedInstruction::Regular(
+					(((imm >> 5) & 0b1111111) << 25)
+						| (rs2.number() << 20) | (rs1.number() << 15)
+						| (op.funct3() << 12) | ((imm & 0b11111) << 7)
+						| op.opcode(),
+				)
 			}
 
 			Instruction::B { op, imm, rs1, rs2 } => {
 				// Note, this corrects for the fact that destination offsets (in the immediate value) are multiples of 2 bytes
-				(((imm >> 20) & 0b1) << 31)
-					| (((imm >> 5) & 0b111111) << 25)
-					| (rs2.number() << 20)
-					| (rs1.number() << 15)
-					| (op.funct3() << 12)
-					| (((imm >> 1) & 0b1111) << 8)
-					| (((imm >> 11) & 0b1) << 7)
-					| op.opcode()
+				EncodedInstruction::Regular(
+					(((imm >> 20) & 0b1) << 31)
+						| (((imm >> 5) & 0b111111) << 25)
+						| (rs2.number() << 20) | (rs1.number() << 15)
+						| (op.funct3() << 12) | (((imm >> 1) & 0b1111) << 8)
+						| (((imm >> 11) & 0b1) << 7)
+						| op.opcode(),
+				)
 			}
 		}
 	}
@@ -871,18 +889,20 @@ impl Fragment {
 			.code
 			.iter()
 			.flat_map(|ins| {
-				let res = ins.encode(position, &self.labels).to_le_bytes();
+				let res = ins.encode(position, &self.labels).bytes();
 				position += ins.size();
 				res
 			})
 			.collect()
 	}
 
-	pub fn write_to(&self, slice: &mut [u32]) {
+	pub fn write_to(&self, slice: &mut [u8]) {
 		// Encode instructions
 		let mut position = Position(0);
-		for (idx, ins) in self.code.code.iter().enumerate() {
-			slice[idx] = ins.encode(position, &self.labels);
+		for ins in self.code.code.iter() {
+			let start = position.0 as usize;
+			let bytes = ins.encode(position, &self.labels).bytes();
+			slice[start..(start + bytes.len())].copy_from_slice(&bytes);
 			position += ins.size();
 		}
 	}
@@ -895,5 +915,14 @@ impl Fragment {
 impl Default for Fragment {
 	fn default() -> Self {
 		Self::new()
+	}
+}
+
+impl EncodedInstruction {
+	pub fn bytes(&self) -> Vec<u8> {
+		match self {
+			EncodedInstruction::Regular(b) => b.to_le_bytes().to_vec(),
+			EncodedInstruction::Compressed(b) => b.to_le_bytes().to_vec(),
+		}
 	}
 }

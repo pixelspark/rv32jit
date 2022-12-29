@@ -37,19 +37,16 @@ impl From<&Fragment> for JitFunction {
 			let buf = heap_caps_malloc(fragment.size() as u32, MALLOC_CAP_32BIT | MALLOC_CAP_EXEC);
 			assert!(!buf.is_null(), "could not allocate code memory");
 
-			let slice: &mut [u32] =
-				std::slice::from_raw_parts_mut(buf as *mut u32, fragment.size() / 4);
-
-			fragment.write_to(slice);
-
 			let slice_u8: &mut [u8] =
 				std::slice::from_raw_parts_mut(buf as *mut u8, fragment.size() * 4);
+
+			fragment.write_to(slice_u8);
 
 			println!(
 				"ASM program {:?} -> {:02x?} @ {:?}",
 				fragment,
 				slice_u8,
-				slice.as_ptr()
+				slice_u8.as_ptr()
 			);
 			JitFunction(buf)
 		}
