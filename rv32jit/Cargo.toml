@@ -4,17 +4,12 @@ version = "0.1.0"
 authors = ["Tommy van der Vorst <tommy@pixelspark.nl>"]
 edition = "2021"
 
-[features]
-#pio = ["esp-idf-sys/pio"]
-
 [dependencies]
-embedded-hal = "0.2"
-embedded-svc = "0.23"
-esp-idf-svc = "^0.43.4"
-esp-idf-hal = "0.39.3"
-esp-idf-sys = { version = "^0.31", features = ["binstart"] }
+log = { version = "0.4", default-features = false }
+esp-idf-svc = { version = "0.47.1", default-features = false }
 rv32assembler = { path = "../rv32assembler" }
+esp-idf-sys = "0.33.5"
 
 [build-dependencies]
-embuild = "0.29"
-anyhow = "1"
+anyhow = "1.0.75"
+embuild = "0.31.3"

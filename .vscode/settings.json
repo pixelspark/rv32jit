@@ -1,0 +1,4 @@
+{
+  "rust-analyzer.cargo.target": "riscv32imc-esp-espidf",
+  "rust-analyzer.runnables.extraArgs": ["--target=riscv32imc-esp-espidf"]
+}

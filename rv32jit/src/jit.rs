@@ -1,3 +1,5 @@
+use std::os::raw::c_void;
+
 use rv32assembler::Fragment;
 
 #[derive(Debug)]
@@ -17,9 +19,7 @@ impl JitFunction {
 	}
 }
 
-use esp_idf_sys::{
-	c_types::c_void, heap_caps_free, heap_caps_malloc, MALLOC_CAP_32BIT, MALLOC_CAP_EXEC,
-};
+use esp_idf_sys::{heap_caps_free, heap_caps_malloc, MALLOC_CAP_32BIT, MALLOC_CAP_EXEC};
 
 impl Drop for JitFunction {
 	fn drop(&mut self) {
@@ -34,7 +34,7 @@ impl From<&Fragment> for JitFunction {
 	/// Make the fragment into a callable function
 	fn from(fragment: &Fragment) -> JitFunction {
 		unsafe {
-			let buf = heap_caps_malloc(fragment.size() as u32, MALLOC_CAP_32BIT | MALLOC_CAP_EXEC);
+			let buf = heap_caps_malloc(fragment.size(), MALLOC_CAP_32BIT | MALLOC_CAP_EXEC);
 			assert!(!buf.is_null(), "could not allocate code memory");
 
 			let slice_u8: &mut [u8] =
